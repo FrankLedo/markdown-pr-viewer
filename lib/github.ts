@@ -297,3 +297,33 @@ export async function fetchThreadMeta(
       path: n.path,
     }));
 }
+
+export async function resolveThread(
+  token: string,
+  threadNodeId: string
+): Promise<void> {
+  await githubGraphQL<unknown>(
+    `mutation ResolveThread($threadId: ID!) {
+      resolveReviewThread(input: { threadId: $threadId }) {
+        thread { id }
+      }
+    }`,
+    { threadId: threadNodeId },
+    token
+  );
+}
+
+export async function unresolveThread(
+  token: string,
+  threadNodeId: string
+): Promise<void> {
+  await githubGraphQL<unknown>(
+    `mutation UnresolveThread($threadId: ID!) {
+      unresolveReviewThread(input: { threadId: $threadId }) {
+        thread { id }
+      }
+    }`,
+    { threadId: threadNodeId },
+    token
+  );
+}

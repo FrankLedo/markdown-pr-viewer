@@ -3,6 +3,7 @@ import {
   getCurrentUser, exchangeCodeForToken,
   listOpenPRs, fetchPRFileInfo, fetchFileContent,
   fetchPrComments, fetchThreadMeta, replyToComment, createPrComment,
+  resolveThread, unresolveThread,
   enrichWithDisplayNames,
 } from './lib/github';
 import type { PRComment, ThreadMeta } from './lib/types';
@@ -451,8 +452,34 @@ async function refreshOverlays(): Promise<void> {
 function buildCallbacks(): OverlayCallbacks {
   return {
     onReply: handleReply,
+    onResolve: handleResolve,
+    onUnresolve: handleUnresolve,
     currentUserLogin: getStoredUser() ?? undefined,
   };
+}
+
+// ── Resolve / unresolve threads ───────────────────────────────────────────────
+
+async function handleResolve(threadNodeId: string): Promise<void> {
+  const token = getStoredToken();
+  if (!token) return;
+  try {
+    await resolveThread(token, threadNodeId);
+    await refreshOverlays();
+  } catch (err) {
+    showAuthError(`Could not resolve thread — ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function handleUnresolve(threadNodeId: string): Promise<void> {
+  const token = getStoredToken();
+  if (!token) return;
+  try {
+    await unresolveThread(token, threadNodeId);
+    await refreshOverlays();
+  } catch (err) {
+    showAuthError(`Could not unresolve thread — ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // ── Reply / new comment ───────────────────────────────────────────────────────

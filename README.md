@@ -34,7 +34,9 @@ Then:
 3. Pick an open PR from the dropdown
 
 > Need a token? [Create a fine-grained PAT](https://github.com/settings/tokens/new?description=markdown-pr-viewer)
-> with **Contents** and **Pull requests** set to Read-only on the target repo.
+> with **Contents: Read-only** and **Pull requests: Read and write** on the target repo.
+> (Use **Pull requests: Read-only** if you only want to *view* comments — posting,
+> replying, and resolving all require write access.)
 
 ---
 
@@ -107,7 +109,7 @@ GitHub's REST API returns markdown files as raw text. This app:
 3. Fetches all PR review comments and maps each to the rendered line via `data-line` attributes
 4. Places comment bubbles anchored to the nearest block element at or above the comment's line
 
-Comments are read-only. To reply or resolve, click through to GitHub.
+With a write-scoped token you can **post new comments, reply to threads, and resolve/unresolve conversations** directly from the viewer — changes are written straight to GitHub via the REST and GraphQL APIs. With a read-only token the comments render but posting is disabled.
 
 ---
 

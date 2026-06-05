@@ -19,7 +19,8 @@ your browser to `api.github.com` — it never touches any server you own.
 3. Under **Repository access**, choose the repos you want to review.
 4. Under **Permissions → Repository permissions**, enable:
    - **Contents** — Read-only
-   - **Pull requests** — Read-only
+   - **Pull requests** — **Read and write** (use Read-only if you only want to
+     *view* comments; posting, replying, and resolving require write access)
 5. Copy the token (`github_pat_…`) and paste it into the app's token field.
 
 > Fine-grained PATs are scoped to specific repos and expire automatically,
