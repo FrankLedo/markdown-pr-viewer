@@ -1,0 +1,11 @@
+name = "markdown-pr-viewer-proxy"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# Secrets/vars are NOT set here. Add them either in the Cloudflare dashboard
+# (Workers → your worker → Settings → Variables) or non-interactively via:
+#   echo "<client-secret>" | npx wrangler secret put GITHUB_CLIENT_SECRET
+#   echo "https://YOU.github.io/markdown-pr-viewer" | npx wrangler secret put ALLOWED_ORIGIN
+#
+#   GITHUB_CLIENT_SECRET  your GitHub OAuth App client secret
+#   ALLOWED_ORIGIN        https://YOUR-USERNAME.github.io/markdown-pr-viewer
