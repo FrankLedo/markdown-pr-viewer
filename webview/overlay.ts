@@ -328,7 +328,7 @@ export function initCodeBlockToggles(container: HTMLElement, onToggle?: () => vo
     const code = pre.querySelector('code');
     const lang = (code?.className.match(/language-(\S+)/) ?? [])[1] ?? '';
     const rawLines = (pre.textContent ?? '').split('\n');
-    const lines = rawLines.at(-1)?.trim() === '' ? rawLines.length - 1 : rawLines.length;
+    const lines = rawLines[rawLines.length - 1]?.trim() === '' ? rawLines.length - 1 : rawLines.length;
     const label = [lang, `${lines} line${lines !== 1 ? 's' : ''}`].filter(Boolean).join(' · ');
 
     const btn = document.createElement('button');

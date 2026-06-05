@@ -1,4 +1,4 @@
-import type { PRComment } from '../src/types';
+import type { PRComment } from '../lib/types';
 
 export type Point = { x: number; y: number };
 export type DiagramType = 'flowchart' | 'sequence' | 'unknown';
