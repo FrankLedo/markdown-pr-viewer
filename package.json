@@ -2,6 +2,8 @@
   "name": "markdown-pr-viewer",
   "version": "0.1.0",
   "description": "Browser-based GitHub PR reviewer for markdown documents",
+  "author": "Frank Ledo",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "node esbuild.mjs --watch",
