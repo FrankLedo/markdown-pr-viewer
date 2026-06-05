@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown PR Viewer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header id="header">
+    <div id="header-left">
+      <span class="app-title">Markdown PR Viewer</span>
+
+      <!-- Repo -->
+      <div id="repo-section" data-state="editing">
+        <span id="repo-display">
+          <span id="repo-name"></span>
+          <button id="repo-change" title="Change repo">✎</button>
+        </span>
+        <span id="repo-form">
+          <input id="repo-input" type="text" placeholder="owner/repo" autocomplete="off" spellcheck="false">
+          <button id="repo-submit">Set repo</button>
+          <span id="repo-error" class="error-text" hidden></span>
+        </span>
+      </div>
+    </div>
+
+    <div id="header-right">
+      <!-- Auth: signed-out -->
+      <div id="auth-section" data-state="signed-out">
+        <span id="auth-signedout">
+          <button id="oauth-btn" hidden>Sign in with GitHub</button>
+          <span class="auth-sep" id="auth-sep" hidden>or</span>
+          <input id="pat-input" type="password" placeholder="GitHub token" autocomplete="off" spellcheck="false">
+          <button id="pat-submit">Connect</button>
+          <a href="https://github.com/settings/tokens/new?description=markdown-pr-viewer&scopes=repo"
+             target="_blank" rel="noopener" class="pat-help">Create token ↗</a>
+          <span id="auth-error" class="error-text" hidden></span>
+        </span>
+        <span id="auth-signedin">
+          <span id="user-display"></span>
+          <button id="sign-out-btn">Sign out</button>
+        </span>
+      </div>
+
+      <!-- PR controls -->
+      <div id="pr-controls" hidden>
+        <select id="pr-select"><option value="">— select a PR —</option></select>
+        <select id="file-select" hidden title="Switch markdown file"></select>
+        <button id="pr-refresh" hidden title="Refresh">↺</button>
+      </div>
+
+      <!-- Nav strip -->
+      <div id="nav-strip-slot"></div>
+    </div>
+  </header>
+
+  <div id="status" class="status" hidden></div>
+
+  <main>
+    <div id="landing">
+      <h2>Markdown PR Viewer</h2>
+      <p>Review GitHub pull requests with rendered markdown and inline comments — no VS Code required.</p>
+      <ol>
+        <li>Enter a GitHub repo above (e.g. <code>owner/repo</code>)</li>
+        <li>Connect with a GitHub token or sign in with GitHub</li>
+        <li>Pick an open PR to review</li>
+      </ol>
+      <p class="landing-hint">
+        Need a token?
+        <a href="https://github.com/settings/tokens/new?description=markdown-pr-viewer&scopes=repo"
+           target="_blank" rel="noopener">Create a fine-grained PAT</a>
+        with read access to <em>Contents</em> and <em>Pull requests</em> on the target repo.
+        The token is stored only in your browser's localStorage and never sent to any server.
+      </p>
+    </div>
+    <div id="content" class="pr-content"></div>
+  </main>
+
+  <script src="dist/mermaid.min.js"></script>
+  <script src="dist/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,439 @@
+import type { PRComment, ThreadMeta } from '../lib/types';
+import type { Point } from './diagram-anchors';
+import { toggleThread, type OnReply, type ThreadOptions } from './thread';
+
+interface Thread {
+  rootId: number;
+  line: number;
+  comments: PRComment[];
+}
+
+export interface OverlayCallbacks {
+  onReply?: OnReply;
+  currentUserLogin?: string;
+  onResolve?: (threadNodeId: string) => void;
+  onUnresolve?: (threadNodeId: string) => void;
+  onEdit?: (commentId: number, newBody: string) => void;
+  onDelete?: (commentId: number) => void;
+  onThreadToggle?: (rootId: number, isOpen: boolean) => void;
+}
+
+function buildThreads(comments: PRComment[]): Thread[] {
+  const roots = new Map<number, Thread>();
+  for (const c of comments) {
+    if (!c.in_reply_to_id) {
+      roots.set(c.id, { rootId: c.id, line: c.line, comments: [c] });
+    }
+  }
+  for (const c of comments) {
+    if (c.in_reply_to_id) {
+      const root = roots.get(c.in_reply_to_id);
+      if (root) root.comments.push(c);
+    }
+  }
+  return Array.from(roots.values());
+}
+
+export function findAnchorElement(container: HTMLElement, line: number): HTMLElement | null {
+  const elements = Array.from(container.querySelectorAll('[data-line]')) as HTMLElement[];
+  let best: HTMLElement | null = null;
+  let bestLine = -1;
+  for (const el of elements) {
+    const elLine = parseInt(el.dataset['line']!, 10);
+    if (elLine < line && elLine > bestLine) {
+      best = el;
+      bestLine = elLine;
+    }
+  }
+  return best;
+}
+
+function createBubble(
+  thread: Thread,
+  meta: ThreadMeta | undefined,
+  callbacks?: OverlayCallbacks,
+  isDiagram = false,
+  isFloating = false
+): HTMLElement {
+  const isResolved = meta?.isResolved ?? false;
+
+  const bubble = document.createElement('span');
+  bubble.className = isResolved ? 'pr-bubble pr-resolved' : 'pr-bubble';
+  bubble.dataset.threadId = String(thread.rootId);
+  bubble.title = isResolved
+    ? `✓ Resolved — ${thread.comments[0].user.login}: ${thread.comments[0].body.slice(0, 60)}`
+    : `${thread.comments[0].user.login}: ${thread.comments[0].body.slice(0, 80)}`;
+
+  if (isResolved) {
+    const check = document.createElement('span');
+    check.textContent = '✓';
+    check.style.fontSize = '10px';
+    bubble.appendChild(check);
+  } else {
+    const avatar = document.createElement('img');
+    avatar.src = thread.comments[0].user.avatar_url;
+    avatar.alt = thread.comments[0].user.login;
+    avatar.className = 'pr-bubble-avatar';
+    bubble.appendChild(avatar);
+
+    if (thread.comments.length > 1) {
+      const count = document.createElement('span');
+      count.textContent = String(thread.comments.length);
+      bubble.appendChild(count);
+    }
+  }
+
+  const options: ThreadOptions = {
+    onReply: callbacks?.onReply,
+    threadNodeId: meta?.nodeId,
+    isResolved,
+    currentUserLogin: callbacks?.currentUserLogin,
+    onResolve: callbacks?.onResolve,
+    onUnresolve: callbacks?.onUnresolve,
+    onEdit: callbacks?.onEdit,
+    onDelete: callbacks?.onDelete,
+    placement: isFloating ? 'popover' : 'inline',
+    showCloseButton: isFloating,
+  };
+  if (isFloating) bubble.classList.add('pr-bubble--floating');
+
+  bubble.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = !document.querySelector(`[data-thread-for="${thread.rootId}"]`);
+    toggleThread(bubble, thread.comments, thread.rootId, options);
+    callbacks?.onThreadToggle?.(thread.rootId, isOpen);
+  });
+
+  return bubble;
+}
+
+export function placeOverlays(
+  container: HTMLElement,
+  comments: PRComment[],
+  threadMeta: ThreadMeta[],
+  callbacks?: OverlayCallbacks,
+  diagramAnchors?: Map<number, Point>
+): void {
+  container.querySelectorAll('.pr-bubble, .pr-bubble-cell, .pr-thread, .pr-table-thread-row').forEach(el => el.remove());
+  document.querySelectorAll('.pr-popover').forEach(el => el.remove());
+  if (comments.length === 0) return;
+  const threads = buildThreads(comments);
+  for (const thread of threads) {
+    const anchor = findAnchorElement(container, thread.line);
+    if (!anchor) continue;
+    const meta = threadMeta.find(m => m.rootCommentId === thread.rootId);
+    const isDiagram = anchor.classList.contains('mermaid');
+    const pre = anchor.tagName.toLowerCase() === 'pre'
+      ? anchor
+      : anchor.closest<HTMLElement>('pre') ?? anchor.querySelector<HTMLElement>('pre');
+    const bubble = createBubble(thread, meta, callbacks, isDiagram, isDiagram || pre !== null);
+
+    if (isDiagram) {
+      const pos = diagramAnchors?.get(thread.rootId);
+      anchor.style.position = 'relative';
+      bubble.style.position = 'absolute';
+      if (pos) {
+        bubble.style.left = `${pos.x}px`;
+        bubble.style.top = `${pos.y}px`;
+      } else {
+        bubble.style.right = '8px';
+        bubble.style.top = '8px';
+      }
+      anchor.appendChild(bubble);
+      continue;
+    }
+
+    if (pre !== null) {
+      const isCollapsed = pre.classList.contains('code-collapsed');
+      if (isCollapsed) {
+        const toggleBtn = pre.previousElementSibling as HTMLElement | null;
+        if (toggleBtn?.classList.contains('code-block-toggle')) {
+          toggleBtn.style.position = 'relative';
+          bubble.style.cssText = 'position:absolute;right:8px;top:50%;transform:translateY(-50%);';
+          toggleBtn.appendChild(bubble);
+        }
+        continue;
+      }
+
+      const blockStartLine = parseInt(anchor.dataset['line'] ?? '0', 10);
+      const totalLines = (pre.textContent ?? '').split('\n').length || 1;
+      const linesInto = Math.max(0, thread.line - blockStartLine - 1);
+      const fraction = Math.min(linesInto / totalLines, 0.95);
+      const rawPaddingTop = parseFloat(getComputedStyle(pre).paddingTop);
+      const paddingTop = isNaN(rawPaddingTop) ? 8 : rawPaddingTop;
+      const rawPaddingBottom = parseFloat(getComputedStyle(pre).paddingBottom);
+      const paddingBottom = isNaN(rawPaddingBottom) ? 8 : rawPaddingBottom;
+      const innerHeight = Math.max(0, pre.getBoundingClientRect().height - paddingTop - paddingBottom);
+      pre.style.position = 'relative';
+      bubble.style.position = 'absolute';
+      bubble.style.right = '8px';
+      bubble.style.top = `${paddingTop + fraction * innerHeight}px`;
+      pre.appendChild(bubble);
+      continue;
+    }
+
+    const tr = (anchor.closest('tr') ??
+      (/^(TABLE|THEAD|TBODY|TFOOT)$/.test(anchor.tagName) ? anchor.querySelector('tr') : null)
+    ) as HTMLElement | null;
+    if (tr) {
+      const cell = document.createElement('td');
+      cell.className = 'pr-bubble-cell';
+      tr.appendChild(cell);
+      cell.appendChild(bubble);
+    } else if (anchor.tagName.toLowerCase() === 'li') {
+      const floatTarget = (anchor.querySelector(':scope > p') as HTMLElement) ?? anchor;
+      floatTarget.prepend(bubble);
+    } else {
+      anchor.prepend(bubble);
+    }
+  }
+}
+
+// Resolves the nearest data-line ancestor of the current selection start.
+function resolveSelectionAnchor(
+  container: HTMLElement
+): { anchor: HTMLElement; line: number } | null {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  const el = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement) as HTMLElement | null;
+  if (!el) return null;
+
+  let candidate: HTMLElement | null = el;
+  while (candidate && candidate !== container) {
+    if (candidate.dataset['line']) {
+      return { anchor: candidate, line: parseInt(candidate.dataset['line'], 10) };
+    }
+    candidate = candidate.parentElement;
+  }
+
+  const allLines = Array.from(container.querySelectorAll('[data-line]')) as HTMLElement[];
+  const selTop = range.getBoundingClientRect().top;
+  let best: HTMLElement | null = null;
+  for (const lineEl of allLines) {
+    if (lineEl.getBoundingClientRect().top <= selTop) best = lineEl;
+  }
+  if (!best) return null;
+  return { anchor: best, line: parseInt(best.dataset['line']!, 10) };
+}
+
+let floatBtn: HTMLButtonElement | null = null;
+let contextMenu: HTMLElement | null = null;
+
+function removeFloatBtn(): void { floatBtn?.remove(); floatBtn = null; }
+function removeContextMenu(): void { contextMenu?.remove(); contextMenu = null; }
+
+export function snapLineFor(line: number, validLines: number[]): number | null {
+  if (validLines.length === 0 || validLines.includes(line)) return null;
+  let best = -1;
+  for (const l of validLines) {
+    if (l <= line && l > best) best = l;
+  }
+  if (best !== -1) return best;
+  return validLines.reduce((a, b) => Math.abs(b - line) < Math.abs(a - line) ? b : a);
+}
+
+export function initSelectionHandlers(
+  container: HTMLElement,
+  onAddComment: (anchor: HTMLElement, line: number) => void,
+  getValidLines: () => number[] = () => []
+): void {
+  document.addEventListener('mouseup', () => {
+    removeFloatBtn();
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+
+    const resolved = resolveSelectionAnchor(container);
+    if (!resolved) return;
+
+    const snapTarget = snapLineFor(resolved.line, getValidLines());
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const btn = document.createElement('button');
+    btn.className = snapTarget !== null ? 'pr-add-btn pr-add-btn--snap' : 'pr-add-btn';
+    btn.textContent = '+ Add comment';
+    btn.title = snapTarget !== null ? 'Line is outside the diff' : '';
+    btn.style.left = '0px';
+    btn.style.top = `${rect.top - 34}px`;
+
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    btn.addEventListener('mouseup', (e) => e.stopPropagation());
+    btn.addEventListener('click', () => {
+      removeFloatBtn();
+      onAddComment(resolved.anchor, resolved.line);
+      window.getSelection()?.removeAllRanges();
+    });
+
+    document.body.appendChild(btn);
+    btn.style.left = `${Math.max(4, rect.right - btn.offsetWidth)}px`;
+    floatBtn = btn;
+  });
+
+  document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) removeFloatBtn();
+  });
+
+  container.addEventListener('contextmenu', (e) => {
+    removeContextMenu();
+    let resolved = resolveSelectionAnchor(container);
+    if (!resolved) {
+      // No text selected — walk up from click target to find nearest [data-line] ancestor.
+      let candidate: HTMLElement | null = e.target as HTMLElement;
+      while (candidate && candidate !== container) {
+        if (candidate.dataset['line']) {
+          resolved = { anchor: candidate, line: parseInt(candidate.dataset['line'], 10) };
+          break;
+        }
+        candidate = candidate.parentElement;
+      }
+    }
+    if (!resolved) return;
+
+    e.preventDefault();
+
+    const snapTarget = snapLineFor(resolved.line, getValidLines());
+    const menu = document.createElement('div');
+    menu.className = 'pr-context-menu';
+    menu.style.left = `${e.clientX}px`;
+    menu.style.top = `${e.clientY}px`;
+
+    const item = document.createElement('div');
+    item.className = 'pr-context-item';
+    item.textContent = snapTarget !== null
+      ? '+ Add comment (outside diff)'
+      : '+ Add comment';
+    item.addEventListener('click', () => {
+      removeContextMenu();
+      onAddComment(resolved.anchor, resolved.line);
+      window.getSelection()?.removeAllRanges();
+    });
+
+    menu.appendChild(item);
+    document.body.appendChild(menu);
+    contextMenu = menu;
+
+    const dismiss = (): void => {
+      removeContextMenu();
+      document.removeEventListener('click', dismiss);
+    };
+    setTimeout(() => document.addEventListener('click', dismiss), 0);
+  });
+}
+
+export function initCodeBlockToggles(container: HTMLElement, onToggle?: () => void): void {
+  container.querySelectorAll<HTMLElement>('pre').forEach(pre => {
+    if (pre.previousElementSibling?.classList.contains('code-block-toggle')) return;
+    const code = pre.querySelector('code');
+    const lang = (code?.className.match(/language-(\S+)/) ?? [])[1] ?? '';
+    const rawLines = (pre.textContent ?? '').split('\n');
+    const lines = rawLines.at(-1)?.trim() === '' ? rawLines.length - 1 : rawLines.length;
+    const label = [lang, `${lines} line${lines !== 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+
+    const btn = document.createElement('button');
+    btn.className = 'code-block-toggle';
+    btn.setAttribute('aria-expanded', 'true');
+
+    const chevron = document.createElement('span');
+    chevron.className = 'toggle-chevron';
+    chevron.textContent = '▾';
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'toggle-label';
+    labelSpan.textContent = label;
+
+    const hint = document.createElement('span');
+    hint.className = 'toggle-hint';
+    hint.textContent = ' — click to collapse';
+
+    btn.appendChild(chevron);
+    btn.appendChild(labelSpan);
+    btn.appendChild(hint);
+
+    btn.addEventListener('click', () => {
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', String(!expanded));
+      chevron.textContent = expanded ? '▸' : '▾';
+      hint.textContent = expanded ? ' — click to expand' : ' — click to collapse';
+      pre.classList.toggle('code-collapsed', expanded);
+      onToggle?.();
+    });
+
+    pre.insertAdjacentElement('beforebegin', btn);
+  });
+}
+
+function calcWouldZoomIn(svg: SVGElement): boolean {
+  const svgRect = svg.getBoundingClientRect();
+  const vbParts = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+  const natW = (vbParts.length >= 4 && vbParts[2] > 0) ? vbParts[2] : svgRect.width;
+  const natH = (vbParts.length >= 4 && vbParts[3] > 0) ? vbParts[3] : svgRect.height;
+  const scaledW = Math.round(natW * Math.min(window.innerWidth * 0.9 / natW, window.innerHeight * 0.88 / natH));
+  return scaledW > svgRect.width + 4;
+}
+
+export function initDiagramZoom(container: HTMLElement): void {
+  container.querySelectorAll<HTMLElement>('.mermaid').forEach(el => {
+    const svg = el.querySelector('svg');
+    if (!svg) return;
+
+    el.style.position = 'relative';
+
+    const zoomBtn = document.createElement('button');
+    zoomBtn.className = 'diagram-zoom-btn';
+    zoomBtn.title = 'Zoom diagram';
+    zoomBtn.textContent = '⤢';
+    zoomBtn.hidden = true;
+    el.appendChild(zoomBtn);
+
+    new ResizeObserver(() => {
+      zoomBtn.hidden = !calcWouldZoomIn(svg);
+    }).observe(svg);
+
+    zoomBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const vbParts = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+      const svgRect = svg.getBoundingClientRect();
+      const natW = (vbParts.length >= 4 && vbParts[2] > 0) ? vbParts[2] : svgRect.width;
+      const natH = (vbParts.length >= 4 && vbParts[3] > 0) ? vbParts[3] : svgRect.height;
+      if (!natW || !natH) return;
+
+      const maxW = window.innerWidth * 0.9;
+      const maxH = window.innerHeight * 0.88;
+      const scale = Math.min(maxW / natW, maxH / natH);
+      const scaledW = Math.round(natW * scale);
+      const scaledH = Math.round(natH * scale);
+
+      const clone = svg.cloneNode(true) as SVGElement;
+      clone.removeAttribute('style');
+      clone.setAttribute('width', String(scaledW));
+      clone.setAttribute('height', String(scaledH));
+      clone.style.cssText = `display:block;width:${scaledW}px;height:${scaledH}px;max-width:none;`;
+
+      const overlay = document.createElement('div');
+      overlay.className = 'diagram-modal-overlay';
+
+      const inner = document.createElement('div');
+      inner.className = 'diagram-modal-inner';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'diagram-modal-close';
+      closeBtn.textContent = '×';
+      closeBtn.title = 'Close (Esc)';
+
+      inner.appendChild(clone);
+      overlay.appendChild(closeBtn);
+      overlay.appendChild(inner);
+      document.body.appendChild(overlay);
+
+      const close = (): void => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+      const onKey = (ev: KeyboardEvent): void => { if (ev.key === 'Escape') close(); };
+
+      closeBtn.addEventListener('click', (ev) => { ev.stopPropagation(); close(); });
+      overlay.addEventListener('click', (ev) => { if (ev.target === overlay) close(); });
+      document.addEventListener('keydown', onKey);
+    });
+  });
+}

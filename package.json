@@ -1,0 +1,19 @@
+{
+  "name": "markdown-pr-viewer",
+  "version": "0.1.0",
+  "description": "Browser-based GitHub PR reviewer for markdown documents",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.mjs --watch",
+    "build": "node esbuild.mjs"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "esbuild": "^0.20.2",
+    "github-slugger": "^2.0.0",
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.0.1",
+    "mermaid": "^11.0.0",
+    "typescript": "^5.4.5"
+  }
+}
